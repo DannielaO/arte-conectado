@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arte Conectado</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>Arte Conectado</h1>
+    </header>
+
+    <main>
+        <section id="introduccion" class="intro">
+            <h2>Bienvenido</h2>
+            <p>Arte Conectado conecta a artistas con compradores de todo el mundo. Aquí encontrarás una selección de obras únicas, disponibles para compra directa. Descubre piezas que inspiran.</p>
+        </section>
+
+        <section id="galeria" class="galeria">
+            <h2>Galería de Obras</h2>
+            <div class="grid">
+                <figure>
+                    <img src="img/pintura1.jpg" alt="Título de la Pintura 1">
+                    <figcaption>"Random 1" - $500</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/pintura2.jpg" alt="Título de la Pintura 2">
+                    <figcaption>"Random 2" - $750</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/pintura3.jpg" alt="Título de la Pintura 3">
+                    <figcaption>"Random 3" - $600</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/pintura4.jpg" alt="Título de la Pintura 4">
+                    <figcaption>"Random 4" - $900</figcaption>
+                </figure>
+                <figure>
+                    <img src="img/pintura5.jpg" alt="Título de la Pintura 5">
+                    <figcaption>"Random 5" - $450</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section id="filtro" class="filtro">
+            <h2>Filtrar Obras</h2>
+            <input type="text" id="busqueda" placeholder="Buscar por título o precio...">
+        </section>
+
+        <section id="contacto" class="contacto">
+            <h2>Contáctanos</h2>
+            <form action="#" method="post">
+                <label for="nombre">Nombre</label>
+                <input type="text" id="nombre" name="nombre" required>
+                
+                <label for="email">Correo Electrónico</label>
+                <input type="email" id="email" name="email" required>
+                
+                <label for="mensaje">Mensaje</label>
+                <textarea id="mensaje" name="mensaje" rows="4" required></textarea>
+                
+                <button type="submit">Enviar</button>
+            </form>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Arte Conectado. Todos los derechos reservados.</p>
+    </footer>
+</body>
+</html>
