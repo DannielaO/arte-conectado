@@ -1,0 +1,13 @@
+{
+  "name": "¿Esto es real?",
+  "short_name": "Esto es real",
+  "description": "Revisa mensajes, correos y enlaces sospechosos antes de confiar en ellos.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0e12",
+  "theme_color": "#0b0e12",
+  "lang": "es",
+  "icons": [
+    {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}
