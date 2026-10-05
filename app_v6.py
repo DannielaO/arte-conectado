@@ -1,3 +1,5 @@
+import os
+import requests
 from urllib.parse import urlparse
 from flask import request, jsonify
 from app_v5 import app, extract_urls, message_signals, host_signals, mentioned_entity, verify_entity_domain
@@ -50,7 +52,6 @@ def _safe_fallback(message, lang='es'):
 
 def safe_analyze():
     response = _original_analyze()
-    # Flask views may return either a Response or (Response, status).
     status = response[1] if isinstance(response, tuple) and len(response) > 1 else getattr(response, 'status_code', 200)
     if status >= 500:
         payload = request.get_json(silent=True) or {}
@@ -62,6 +63,29 @@ def safe_analyze():
 
 app.view_functions['analyze'] = safe_analyze
 
+@app.get('/api/diagnostics/webrisk')
+def webrisk_diagnostics():
+    key = os.getenv('GOOGLE_WEB_RISK_API_KEY') or os.getenv('WEB_RISK_API_KEY')
+    if not key:
+        return jsonify(key_present=False, google_status=None, result='missing_key')
+    try:
+        params = [
+            ('threatTypes', 'MALWARE'),
+            ('threatTypes', 'SOCIAL_ENGINEERING'),
+            ('uri', 'https://example.com/'),
+            ('key', key),
+        ]
+        r = requests.get('https://webrisk.googleapis.com/v1/uris:search', params=params, timeout=7)
+        detail = None
+        try:
+            body = r.json()
+            if isinstance(body, dict):
+                detail = ((body.get('error') or {}).get('message'))
+        except Exception:
+            pass
+        return jsonify(key_present=True, google_status=r.status_code, result='ok' if r.status_code == 200 else 'google_error', detail=detail)
+    except Exception as e:
+        return jsonify(key_present=True, google_status=None, result='request_failed', detail=type(e).__name__)
+
 if __name__ == '__main__':
-    import os
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
