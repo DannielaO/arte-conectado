@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app_v5:app
+    startCommand: gunicorn app_v6:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
