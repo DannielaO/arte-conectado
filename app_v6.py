@@ -1,12 +1,13 @@
 import os
 from collections import Counter
 from threading import Lock
-from flask import request, jsonify, render_template_string
+from flask import request, jsonify, render_template_string, abort
 from app_v5 import app, extract_urls, message_signals, host_signals, mentioned_entity, verify_entity_domain, HTML
 
 _original_analyze = app.view_functions.get('analyze')
 _metrics = Counter()
 _sources = Counter()
+_feedback = Counter()
 _metrics_lock = Lock()
 
 
@@ -81,25 +82,31 @@ def safe_analyze():
 
 app.view_functions['analyze'] = safe_analyze
 
-# Add a lightweight clear button and first-party aggregate usage counters.
+# Add clear + feedback UI and lightweight first-party aggregate metrics.
 _launch_html = HTML.replace(
     'button.main{width:100%;margin-top:10px;padding:15px 18px;border:0;border-radius:14px;background:var(--acc);font-weight:850;font-size:16px;cursor:pointer}',
-    'button.main{width:100%;margin-top:10px;padding:15px 18px;border:0;border-radius:14px;background:var(--acc);font-weight:850;font-size:16px;cursor:pointer}.clearBtn{width:100%;margin-top:8px;padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:transparent;color:#c6d0d9;font-weight:750;font-size:14px;cursor:pointer}.clearBtn:active{transform:translateY(1px)}'
+    'button.main{width:100%;margin-top:10px;padding:15px 18px;border:0;border-radius:14px;background:var(--acc);font-weight:850;font-size:16px;cursor:pointer}.clearBtn{width:100%;margin-top:8px;padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:transparent;color:#c6d0d9;font-weight:750;font-size:14px;cursor:pointer}.clearBtn:active{transform:translateY(1px)}.feedback{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:15px;background:#0d1218}.feedbackQ{font-size:14px;font-weight:750;margin-bottom:10px}.feedbackBtns{display:flex;gap:9px}.feedbackBtn{flex:1;padding:10px 12px;border:1px solid #32404e;border-radius:12px;background:#141a21;color:#f4f7fa;font-weight:750;cursor:pointer}.feedbackBtn:disabled{opacity:.55;cursor:default}.feedbackThanks{display:none;margin-top:9px;color:var(--muted);font-size:12px}'
 ).replace(
     '<button class="main" id="analyzeBtn" onclick="analyze()">Analizar mensaje</button>',
     '<button class="main" id="analyzeBtn" onclick="analyze()">Analizar mensaje</button><button class="clearBtn" id="clearBtn" type="button" onclick="clearMessage()">Limpiar</button>'
 ).replace(
+    '</details></div></section>',
+    '</details><div class="feedback"><div id="feedbackQ" class="feedbackQ">¿Te sirvió este análisis?</div><div class="feedbackBtns"><button id="yesBtn" class="feedbackBtn" type="button" onclick="sendFeedback(true)">👍 Sí</button><button id="noBtn" class="feedbackBtn" type="button" onclick="sendFeedback(false)">👎 No</button></div><div id="feedbackThanks" class="feedbackThanks">Gracias. Tu respuesta nos ayuda a mejorar.</div></div></div></section>'
+).replace(
     "loading:'Analizando…',risk:'RIESGO'",
-    "loading:'Analizando…',clear:'Limpiar',risk:'RIESGO'"
+    "loading:'Analizando…',clear:'Limpiar',risk:'RIESGO',feedbackQ:'¿Te sirvió este análisis?',yes:'👍 Sí',no:'👎 No',thanks:'Gracias. Tu respuesta nos ayuda a mejorar.'"
 ).replace(
     "loading:'Checking…',risk:'RISK'",
-    "loading:'Checking…',clear:'Clear',risk:'RISK'"
+    "loading:'Checking…',clear:'Clear',risk:'RISK',feedbackQ:'Was this analysis helpful?',yes:'👍 Yes',no:'👎 No',thanks:'Thanks. Your feedback helps us improve.'"
 ).replace(
     "loading:t.loading,riskLabel:t.risk",
-    "loading:t.loading,clearBtn:t.clear,riskLabel:t.risk"
+    "loading:t.loading,clearBtn:t.clear,riskLabel:t.risk,feedbackQ:t.feedbackQ,yesBtn:t.yes,noBtn:t.no,feedbackThanks:t.thanks"
 ).replace(
     "async function analyze(){",
-    "function track(event){try{const q=new URLSearchParams(location.search);const source=q.get('utm_source')||(document.referrer?new URL(document.referrer).hostname:'direct');fetch('/api/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event,source}),keepalive:true}).catch(()=>{})}catch(e){}}function clearMessage(){message.value='';result.style.display='none';error.style.display='none';loading.style.display='none';message.focus();track('clear')}async function analyze(){"
+    "let currentDecision='';let feedbackSent=false;function trafficSource(){try{const q=new URLSearchParams(location.search);return q.get('utm_source')||(document.referrer?new URL(document.referrer).hostname:'direct')}catch(e){return 'direct'}}function track(event){try{fetch('/api/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event,source:trafficSource()}),keepalive:true}).catch(()=>{})}catch(e){}}function resetFeedback(){feedbackSent=false;currentDecision='';yesBtn.disabled=false;noBtn.disabled=false;feedbackThanks.style.display='none'}function clearMessage(){message.value='';result.style.display='none';error.style.display='none';loading.style.display='none';resetFeedback();message.focus();track('clear')}async function sendFeedback(helpful){if(feedbackSent||!currentDecision)return;feedbackSent=true;yesBtn.disabled=true;noBtn.disabled=true;feedbackThanks.style.display='block';try{await fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({helpful,decision:currentDecision,source:trafficSource()}),keepalive:true})}catch(e){}}async function analyze(){resetFeedback();"
+).replace(
+    "result.style.display='block'",
+    "currentDecision=d.decision||'unknown';result.style.display='block'"
 ).replace(
     "if('serviceWorker' in navigator)",
     "track('page_view');if('serviceWorker' in navigator)"
@@ -121,10 +128,35 @@ def usage_event():
     return ('', 204)
 
 
+@app.post('/api/feedback')
+def usage_feedback():
+    data = request.get_json(silent=True) or {}
+    helpful = data.get('helpful')
+    decision = str(data.get('decision') or 'unknown')[:20]
+    source = str(data.get('source') or 'direct')[:80]
+    if helpful not in (True, False):
+        return jsonify(error='invalid feedback'), 400
+    vote = 'yes' if helpful else 'no'
+    with _metrics_lock:
+        _feedback['total'] += 1
+        _feedback[vote] += 1
+        _feedback[f'{vote}:{decision}'] += 1
+        _feedback[f'{vote}:source:{source or "direct"}'] += 1
+    return ('', 204)
+
+
 @app.get('/api/stats')
 def usage_stats():
+    # Keep internal launch metrics private. Configure STATS_KEY in Render and
+    # send it as X-Stats-Key when reading this endpoint.
+    expected = os.getenv('STATS_KEY')
+    supplied = request.headers.get('X-Stats-Key')
+    if not expected or supplied != expected:
+        abort(404)
     with _metrics_lock:
-        return jsonify(metrics=dict(_metrics), sources=dict(_sources), note='Contadores temporales: se reinician al reiniciar o desplegar el servicio.')
+        total = int(_feedback.get('total', 0)); yes = int(_feedback.get('yes', 0)); no = int(_feedback.get('no', 0))
+        helpful_rate = round((yes / total) * 100, 1) if total else None
+        return jsonify(metrics=dict(_metrics), sources=dict(_sources), feedback=dict(_feedback), helpful_rate=helpful_rate, note='Contadores temporales: se reinician al reiniciar o desplegar el servicio.')
 
 
 @app.after_request
@@ -137,7 +169,7 @@ def launch_headers(response):
 
 @app.get('/health')
 def health():
-    return jsonify(status='ok', version='launch-2026-10-05-metrics-clear')
+    return jsonify(status='ok', version='launch-2026-10-06-feedback')
 
 
 if __name__ == '__main__':
