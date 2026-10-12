@@ -1,4 +1,5 @@
 import os
+from durable_metrics import record as durable_record, summary as durable_summary
 from collections import Counter
 from threading import Lock
 from flask import request, jsonify, render_template_string, abort
@@ -14,6 +15,7 @@ _metrics_lock = Lock()
 def _bump(key, amount=1):
     with _metrics_lock:
         _metrics[key] += amount
+    durable_record(key)
 
 
 def _safe_fallback(message, lang='es'):
@@ -125,6 +127,7 @@ def usage_event():
         _bump(event)
         if event == 'page_view':
             with _metrics_lock: _sources[source or 'direct'] += 1
+        durable_record(event, source)
     return ('', 204)
 
 
@@ -142,6 +145,7 @@ def usage_feedback():
         _feedback[vote] += 1
         _feedback[f'{vote}:{decision}'] += 1
         _feedback[f'{vote}:source:{source or "direct"}'] += 1
+    durable_record('feedback_' + vote, source, decision)
     return ('', 204)
 
 
@@ -153,6 +157,9 @@ def usage_stats():
     supplied = request.headers.get('X-Stats-Key')
     if not expected or supplied != expected:
         abort(404)
+    persistent = durable_summary()
+    if persistent.get('configured') and not persistent.get('error'):
+        return jsonify(persistent)
     with _metrics_lock:
         total = int(_feedback.get('total', 0)); yes = int(_feedback.get('yes', 0)); no = int(_feedback.get('no', 0))
         helpful_rate = round((yes / total) * 100, 1) if total else None
