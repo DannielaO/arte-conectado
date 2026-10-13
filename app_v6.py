@@ -124,7 +124,8 @@ app.view_functions['home'] = home_v6
 def usage_event():
     data = request.get_json(silent=True) or {}; event = str(data.get('event') or '')[:40]; source = str(data.get('source') or 'direct')[:80]
     if event in {'page_view','clear'}:
-        _bump(event)
+        with _metrics_lock:
+            _metrics[event] += 1
         if event == 'page_view':
             with _metrics_lock: _sources[source or 'direct'] += 1
         durable_record(event, source)
